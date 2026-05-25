@@ -1,0 +1,224 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tenant {
+  id             String         @id @default(uuid())
+  name           String
+  niche          String
+  description    String?
+  logoUrl        String?
+  primaryColor   String?
+  onboardingData Json?          // Configurações do nicho, regras, FAQ inicial
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  users          User[]
+  channels       Channel[]
+  leads          Lead[]
+  conversations  Conversation[]
+  services       Service[]
+  offers         Offer[]
+  faqs           Faq[]
+  appointments   Appointment[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+}
+
+model User {
+  id                      String         @id @default(uuid())
+  tenantId                String
+  tenant                  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name                    String
+  email                   String         @unique
+  role                    String         @default("agent") // admin, manager, agent, finance
+  whatsappForNotifications String?
+  active                  Boolean        @default(true)
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  assignedConversations   Conversation[]
+}
+
+model Channel {
+  id             String    @id @default(uuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type           String    // whatsapp, instagram, site
+  identifier     String    // número de telefone ou handle do instagram
+  credentialsRef String?
+  status         String    @default("disconnected") // connected, disconnected
+  connectedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Lead {
+  id                  String         @id @default(uuid())
+  tenantId            String
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  nome                String
+  telefone            String?
+  email               String?
+  instagramHandle     String?
+  canalOrigem         String         @default("whatsapp") // whatsapp, instagram, site, email
+  interesse           String?
+  status              String         @default("novo") // novo, em_qualificacao, qualificado, proposta, cliente, perdido, inativo
+  etapaFunil          String         @default("topo") // topo, meio, fundo, pos-venda
+  responsavelInternoId String?
+  consentimento       Boolean        @default(false)
+  consentimentoAt     DateTime?
+  consentimentoOrigem String?
+  tags                Json?          // Array de tags salvas como JSON
+  observacoes         String?
+  proximaAcao         String?
+  ultimoContatoEm     DateTime       @default(now())
+  proximoFollowupEm   DateTime?
+  valorPotencial      Float?
+  motivoPerda         String?
+  scoreQualificacao   Int            @default(0)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  conversations       Conversation[]
+  appointments        Appointment[]
+  consentRecords      ConsentRecord[]
+}
+
+model Conversation {
+  id             String    @id @default(uuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  channelId      String?
+  status         String    @default("open") // open, idle, closed, human_required
+  lastMessageAt  DateTime  @default(now())
+  assignedUserId String?
+  assignedUser   User?     @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  sentiment      String?   @default("neutral") // positive, neutral, negative
+  priority       String    @default("medium") // low, medium, high
+  messages       Message[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  tenantId       String
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      String       // in (incoming), out (outgoing)
+  senderType     String       // lead, bot, human
+  content        String
+  contentType    String       @default("text") // text, image, audio, template
+  timestamp      DateTime     @default(now())
+  externalId     String?      @unique
+  meta           Json?        // Metadados adicionais (ex: status de entrega da Meta)
+}
+
+model Service {
+  id              String        @id @default(uuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  priceMin        Float
+  priceMax        Float
+  durationMinutes Int           @default(30)
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  appointments    Appointment[]
+  offers          Offer[]
+}
+
+model Offer {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  serviceId   String?
+  service     Service?  @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  validFrom   DateTime
+  validUntil  DateTime
+  conditions  String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Faq {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoria           String   // horarios, precos, localizacao, produtos, etc.
+  pergunta            String
+  variacoes           Json?    // Array de variações de perguntas
+  respostaCurta       String
+  respostaCompleta    String?
+  escalarHumanoQuando String?
+  tags                Json?    // Array de tags
+  nichoAplicavel      Json?    // Array de nichos
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Appointment {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leadId          String
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  serviceId       String?
+  service         Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  startAt         DateTime
+  endAt           DateTime
+  status          String   @default("scheduled") // scheduled, confirmed, done, no_show, cancelled
+  calendarEventId String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Notification {
+  id           String    @id @default(uuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ruleId       String?
+  eventPayload Json?
+  recipient    String
+  channel      String    // whatsapp, email
+  templateId   String?
+  status       String    @default("queued") // queued, sent, delivered, failed
+  error        String?
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorType  String   // user, bot, system
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+}
+
+model ConsentRecord {
+  id              String   @id @default(uuid())
+  tenantId        String
+  leadId          String
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  accepted        Boolean
+  acceptedAt      DateTime @default(now())
+  termsVersion    String   @default("1.0")
+  sourceMessageId String?
+}
